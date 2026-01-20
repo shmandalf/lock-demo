@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://js.pusher.com/7.2/pusher.min.js"></script>
+</head>
+<body>
+    <h1>Simple WebSocket Test</h1>
+    <button onclick="connect()">Connect</button>
+    <button onclick="sendTest()">Send Test</button>
+    <div id="log"></div>
+    
+    <script>
+        let pusher = null;
+        
+        function log(msg) {
+            document.getElementById('log').innerHTML += msg + '<br>';
+            console.log(msg);
+        }
+        
+        function connect() {
+            pusher = new Pusher('app-key', {
+                wsHost: window.location.hostname,
+                wsPort: 6001,
+                forceTLS: false,
+                cluster: 'mt1'
+            });
+            
+            pusher.connection.bind('connected', () => log('✅ Connected'));
+            pusher.connection.bind('error', (err) => log('❌ Error: ' + err));
+            
+            const channel = pusher.subscribe('tasks');
+            channel.bind('task.status.changed', (data) => {
+                log('📡 Event: ' + JSON.stringify(data));
+            });
+        }
+        
+        function sendTest() {
+            fetch('/api/tasks/test-broadcast')
+                .then(r => r.json())
+                .then(data => log('Test sent: ' + JSON.stringify(data)));
+        }
+    </script>
+</body>
+</html>

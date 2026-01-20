@@ -1,0 +1,111 @@
+@import 'tailwindcss';
+
+/* Кастомные цвета для демо */
+@theme {
+    --color-semaphore-blue: #3498db;
+    --color-semaphore-orange: #f39c12;
+    --color-semaphore-yellow: #f1c40f;
+    --color-semaphore-green: #2ecc71;
+    --color-semaphore-red: #e74c3c;
+    --color-semaphore-purple: #9b59b6;
+    --color-semaphore-dark: #2c3e50;
+}
+
+/* Кастомные стили для демо */
+.task {
+    @apply absolute w-8 h-8 flex items-center justify-center font-bold text-white cursor-pointer transition-all duration-300 z-50;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+}
+
+.task:hover {
+    @apply scale-110 z-60;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
+}
+
+.task-queued {
+    @apply bg-semaphore-blue;
+}
+
+.task-processing {
+    @apply bg-semaphore-orange;
+}
+
+.task-checking {
+    @apply bg-semaphore-yellow;
+}
+
+.task-lock {
+    @apply bg-semaphore-green;
+}
+
+.task-failed {
+    @apply bg-semaphore-red;
+}
+
+.task-progress {
+    @apply bg-semaphore-purple;
+}
+
+.task-completed {
+    @apply bg-green-600;
+}
+
+.pipeline-line {
+    @apply absolute top-1/2 left-0 right-0 h-0.5;
+    background: linear-gradient(to right, transparent, var(--color-semaphore-blue), transparent);
+    transform: translateY(-50%);
+}
+
+.pipeline-mid {
+    @apply absolute top-0 bottom-0 left-1/2 w-0.5 bg-semaphore-red;
+    transform: translateX(-50%);
+}
+
+.section-divider {
+    @apply absolute top-0 bottom-0 w-px bg-gray-300 z-10;
+}
+
+.legend-color {
+    @apply w-4 h-4 rounded-sm;
+}
+
+.log-panel {
+    font-family: 'Courier New', monospace;
+}
+
+@keyframes task-pulse {
+
+    0%,
+    100% {
+        transform: translateY(-50%) scale(1);
+    }
+
+    50% {
+        transform: translateY(-50%) scale(1.1);
+    }
+}
+
+.task-pulse {
+    animation: task-pulse 0.3s ease;
+}
+
+/* Стили для этапов */
+.stage-label {
+    @apply absolute top-2 text-gray-600 text-xs font-medium text-center w-20 z-20;
+}
+
+/* Специфичные стили для демо */
+.progress-thin {
+    height: 4px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #2c3e50, #34495e);
+    color: white;
+    border: none;
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+}
