@@ -5,6 +5,7 @@ namespace App\Traits;
 use App\Contracts\SemaphoreInterface;
 use App\Services\SemaphoreManager;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
 
 trait UsesSemaphore
 {
@@ -16,6 +17,18 @@ trait UsesSemaphore
         int $maxConcurrent = 2,
         int $timeout = 10
     ): SemaphoreInterface {
+        // Небольшой костыль с сохранением значения $maxConcurrent
+        // Получаем сохраненное значение из конфига задач
+        $configKey = "semaphore_config:{$key}";
+        $storedMaxConcurrent = Redis::get($configKey);
+
+        if ($storedMaxConcurrent !== null) {
+            $maxConcurrent = (int)$storedMaxConcurrent;
+        }
+
+        // Сохраняем конфиг на случай ретраев
+        Redis::setex($configKey, $timeout + 60, $maxConcurrent);
+
         return app(SemaphoreManager::class)->make($key, $maxConcurrent, $timeout);
     }
 
