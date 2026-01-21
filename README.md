@@ -14,7 +14,7 @@
 
 </div>
 
-![Демо работы семафоров](https://github.com/user-attachments/assets/f5818a8c-648d-4235-83f0-484d33e7ca41)
+<video src="https://github.com/user-attachments/assets/f5818a8c-648d-4235-83f0-484d33e7ca41" controls width="100%"></video>
 
 ## 📋 Описание проекта
 
