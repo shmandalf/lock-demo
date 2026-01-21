@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\TaskStatusChanged;
 use App\Jobs\ProcessTask;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -13,8 +12,15 @@ class TaskController extends Controller
 {
     public function create(Request $request)
     {
-        $count = $request->input('count', 1);
-        $delay = $request->input('delay', 0);
+        $validated = $request->validate([
+            'count' => 'required|integer|min:1|max:20',
+            'delay' => 'integer|min:0|max:60',
+            'max_concurrent' => 'integer|min:1|max:10',
+        ]);
+
+        $count = $validated['count'];
+        $delay = $validated['delay'] ?? 0;
+        $maxConcurrent = $validated['max_concurrent'] ?? 2;
 
         $taskIds = [];
 
@@ -24,7 +30,8 @@ class TaskController extends Controller
             // Добавляем случайную задержку
             $randomDelay = $delay + ($i * 0.1);
 
-            ProcessTask::dispatch($taskId)
+            // Передаем maxConcurrent в конструктор Job
+            ProcessTask::dispatch($taskId, 1, $maxConcurrent)
                 ->delay(now()->addSeconds($randomDelay));
 
             $taskIds[] = $taskId;
@@ -34,7 +41,8 @@ class TaskController extends Controller
             'success' => true,
             'task_ids' => $taskIds,
             'count' => $count,
-            'message' => "{$count} task(s) queued"
+            'max_concurrent' => $maxConcurrent,
+            'message' => "{$count} task(s) queued with max concurrent = {$maxConcurrent}"
         ]);
     }
 
@@ -51,11 +59,19 @@ class TaskController extends Controller
                 $holders = Redis::zrange($key, 0, -1, 'WITHSCORES');
                 $count = count($holders) / 2; // Каждый holder имеет score
 
+                // Извлекаем max_concurrent из имени ключа или метаданных
+                $maxConcurrent = 2; // По умолчанию
+                if (preg_match('/max:(\d+)/', $key, $matches)) {
+                    $maxConcurrent = $matches[1];
+                }
+
                 $semaphoreStats[] = [
                     'key' => $key,
                     'current' => $count,
+                    'max_concurrent' => (int)$maxConcurrent,
                     'holders' => array_chunk($holders, 2),
                     'ttl' => Redis::ttl($key),
+                    'available' => max(0, $maxConcurrent - $count),
                 ];
             }
 
@@ -81,13 +97,17 @@ class TaskController extends Controller
                 'locks' => $lockStats,
                 'semaphore_explanation' => [
                     'type' => 'Redis-based counting semaphore',
-                    'max_concurrent' => 2,
+                    'max_concurrent' => 'Configurable via frontend',
                     'purpose' => 'Limit concurrent task processing',
                     'implementation' => 'Redis sorted set with timestamps',
                 ],
             ]);
         } catch (\Exception $e) {
-            // TODO
+            return response()->json([
+                'error' => $e->getMessage(),
+                'semaphores' => [],
+                'locks' => [],
+            ], 500);
         }
     }
 
@@ -119,12 +139,23 @@ class TaskController extends Controller
                 }
             }
 
+            // Очищаем все семафоры
+            $semaphoreKeys = Redis::keys('semaphore:*');
+            $clearedSemaphores = [];
+
+            foreach ($semaphoreKeys as $key) {
+                if (Redis::del($key)) {
+                    $clearedSemaphores[] = $key;
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Queue and locks cleared',
+                'message' => 'Queue, locks and semaphores cleared',
                 'cleared' => [
                     'pending_jobs' => $pendingCount,
                     'locks' => $clearedLocks,
+                    'semaphores' => $clearedSemaphores,
                 ]
             ]);
         } catch (\Exception $e) {

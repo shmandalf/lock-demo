@@ -48,6 +48,97 @@
             width: 12px !important;
             height: 12px !important;
         }
+
+        /* Стили для слотов семафора */
+        .semaphore-slots-container {
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .semaphore-slots-label {
+            color: #4a5568;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        .semaphore-slots {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .semaphore-slot {
+            width: 24px;
+            height: 8px;
+            border-radius: 2px;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e0;
+            transition: all 0.3s ease;
+        }
+
+        .semaphore-slot.active {
+            background: #48bb78;
+            border-color: #38a169;
+            box-shadow: 0 0 4px rgba(72, 187, 120, 0.5);
+        }
+
+        .semaphore-slot.available {
+            background: #90cdf4;
+            border-color: #63b3ed;
+        }
+
+        /* Стили для слайдера */
+        .semaphore-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .semaphore-value {
+            min-width: 40px;
+            text-align: center;
+            font-weight: bold;
+            color: #2d3748;
+            background: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            background: #cbd5e0;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #4299e1;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #4299e1;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
     </style>
 </head>
 
@@ -103,6 +194,9 @@
                             <div class="stage-label left-[30%]">PROCESS</div>
                             <div class="stage-label left-[70%]">IN PROGRESS</div>
                             <div class="stage-label left-[90%]">COMPLETE</div>
+
+                            <!-- Слоты семафора -->
+                            <div class="semaphore-slots-pipeline" id="semaphoreSlotsPipeline"></div>
                         </div>
                     </div>
 
@@ -138,7 +232,7 @@
                     <!-- Stats и Controls в одной строке -->
                     <div class="flex flex-col md:flex-row gap-3 mb-3 flex-shrink-0">
                         <!-- Stats -->
-                        <div class="grid grid-cols-3 gap-2 md:gap-3 md:w-2/3">
+                        <div class="grid grid-cols-4 gap-2 md:gap-3 md:w-2/3">
                             <div class="stat-card rounded-xl shadow-lg p-3 md:p-4">
                                 <div class="text-center">
                                     <div class="text-gray-300 text-sm mb-1">ACTIVE TASKS</div>
@@ -157,11 +251,32 @@
                                     <div class="stat-value text-white text-lg md:text-xl" id="completedTasks">0</div>
                                 </div>
                             </div>
+                            <div class="stat-card rounded-xl shadow-lg p-3 md:p-4">
+                                <div class="text-center">
+                                    <div class="text-gray-300 text-sm mb-1">MAX CONCURRENT</div>
+                                    <div class="stat-value text-white text-lg md:text-xl" id="maxConcurrentValue">2</div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Controls -->
                         <div class="bg-white/95 rounded-xl shadow-xl p-3 md:p-4 border border-gray-200 md:w-1/3">
-                            <div class="flex flex-col gap-2">
+                            <!-- Управление семафором -->
+                            <div class="semaphore-controls">
+                                <span class="text-sm text-gray-600 whitespace-nowrap">Max Tasks:</span>
+                                <input type="range" id="maxConcurrentSlider" min="1" max="10" value="2">
+                                <div class="semaphore-value" id="maxConcurrentDisplay">2</div>
+                            </div>
+
+                            <!-- Визуализация слотов -->
+                            <div class="semaphore-slots-container">
+                                <div class="semaphore-slots-label">Semaphore Slots</div>
+                                <div class="semaphore-slots" id="semaphoreSlots">
+                                    <!-- Слоты будут генерироваться JS -->
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-2 mt-2">
                                 <div class="flex gap-2">
                                     <button class="flex items-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow hover:shadow-lg text-sm flex-1" id="createSingleBtn">
                                         <span>+</span>
@@ -224,6 +339,9 @@
             let channel = null;
             const csrfToken = '{{ csrf_token() }}';
 
+            // Настройки семафора
+            let maxConcurrent = 2;
+
             // Проверяем что Pusher загружен
             if (typeof window.Pusher === 'undefined') {
                 console.error('Pusher not loaded');
@@ -255,10 +373,156 @@
                 addLog('SYSTEM', 'error', 1, 'WebSocket initialization failed');
             }
 
+            // Инициализация UI семафора
+            initializeSemaphoreUI();
+
             // Обработчики кнопок
             document.getElementById('createSingleBtn').addEventListener('click', () => createTask(1));
             document.getElementById('createThreeBtn').addEventListener('click', () => createTask(3));
             document.getElementById('createFiveBtn').addEventListener('click', () => createTask(5));
+
+            // Слайдер для выбора max concurrent
+            const maxConcurrentSlider = document.getElementById('maxConcurrentSlider');
+            const maxConcurrentDisplay = document.getElementById('maxConcurrentDisplay');
+            const maxConcurrentValue = document.getElementById('maxConcurrentValue');
+
+            maxConcurrentSlider.addEventListener('input', function() {
+                maxConcurrent = parseInt(this.value);
+                maxConcurrentDisplay.textContent = maxConcurrent;
+                maxConcurrentValue.textContent = maxConcurrent;
+                updateSemaphoreSlots();
+                updateStats();
+                addLog('SYSTEM', 'config', 1, `Max concurrent tasks changed to ${maxConcurrent}`);
+            });
+
+            // Функция инициализации UI семафора
+            function initializeSemaphoreUI() {
+                updateSemaphoreSlots();
+
+                // Создаем слоты на пайплайне
+                const slotsContainer = document.getElementById('semaphoreSlotsPipeline');
+
+                // Очищаем контейнер
+                slotsContainer.innerHTML = '';
+
+                // Создаем линию слотов
+                for (let i = 0; i < maxConcurrent; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'semaphore-slot-pipeline';
+                    slot.style.position = 'absolute';
+                    slot.style.width = '12px';
+                    slot.style.height = '12px';
+                    slot.style.borderRadius = '2px';
+                    slot.style.backgroundColor = '#e2e8f0';
+                    slot.style.border = '1px solid #cbd5e0';
+                    slot.style.bottom = '10px';
+                    slot.style.left = `${50 + (i - maxConcurrent/2 + 0.5) * 3}%`;
+                    slot.style.transform = 'translateX(-50%)';
+                    slot.style.transition = 'all 0.3s ease';
+                    slot.style.zIndex = '5';
+                    slot.dataset.slotIndex = i;
+                    slotsContainer.appendChild(slot);
+                }
+
+                updatePipelineSemaphoreSlots();
+            }
+
+            // Обновление слотов семафора
+            function updateSemaphoreSlots() {
+                const slotsContainer = document.getElementById('semaphoreSlots');
+                slotsContainer.innerHTML = '';
+
+                // Рассчитываем активные слоты
+                let occupiedSlots = 0;
+                for (const taskId in tasks) {
+                    const task = tasks[taskId];
+                    if (task.status === 'lock_acquired' || task.status === 'processing_progress') {
+                        occupiedSlots++;
+                    }
+                }
+
+                // Создаем слоты
+                for (let i = 0; i < maxConcurrent; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'semaphore-slot';
+
+                    if (i < occupiedSlots) {
+                        slot.classList.add('active');
+                    } else {
+                        slot.classList.add('available');
+                    }
+
+                    slotsContainer.appendChild(slot);
+                }
+
+                // Обновляем слоты на пайплайне
+                updatePipelineSemaphoreSlots();
+            }
+
+            // Обновление слотов на пайплайне
+            function updatePipelineSemaphoreSlots() {
+                const slots = document.querySelectorAll('.semaphore-slot-pipeline');
+
+                // Рассчитываем активные слоты
+                let occupiedSlots = 0;
+                for (const taskId in tasks) {
+                    const task = tasks[taskId];
+                    if (task.status === 'lock_acquired' || task.status === 'processing_progress') {
+                        occupiedSlots++;
+                    }
+                }
+
+                // Обновляем каждый слот
+                slots.forEach((slot, index) => {
+                    if (index < maxConcurrent) {
+                        slot.style.display = 'block';
+                        if (index < occupiedSlots) {
+                            slot.style.backgroundColor = '#48bb78';
+                            slot.style.borderColor = '#38a169';
+                            slot.style.boxShadow = '0 0 4px rgba(72, 187, 120, 0.5)';
+                        } else {
+                            slot.style.backgroundColor = '#90cdf4';
+                            slot.style.borderColor = '#63b3ed';
+                            slot.style.boxShadow = 'none';
+                        }
+                    } else {
+                        slot.style.display = 'none';
+                    }
+                });
+
+                // Добавляем или удаляем слоты при изменении maxConcurrent
+                const pipeline = document.getElementById('pipeline');
+                const slotsContainer = document.getElementById('semaphoreSlotsPipeline');
+                const currentSlots = slotsContainer.children.length;
+
+                if (currentSlots < maxConcurrent) {
+                    // Добавляем недостающие слоты
+                    for (let i = currentSlots; i < maxConcurrent; i++) {
+                        const slot = document.createElement('div');
+                        slot.className = 'semaphore-slot-pipeline';
+                        slot.style.position = 'absolute';
+                        slot.style.width = '12px';
+                        slot.style.height = '12px';
+                        slot.style.borderRadius = '2px';
+                        slot.style.backgroundColor = '#90cdf4';
+                        slot.style.border = '1px solid #63b3ed';
+                        slot.style.bottom = '10px';
+                        slot.style.left = `${50 + (i - maxConcurrent/2 + 0.5) * 3}%`;
+                        slot.style.transform = 'translateX(-50%)';
+                        slot.style.transition = 'all 0.3s ease';
+                        slot.style.zIndex = '5';
+                        slot.dataset.slotIndex = i;
+                        slotsContainer.appendChild(slot);
+                    }
+                } else if (currentSlots > maxConcurrent) {
+                    // Удаляем лишние слоты
+                    for (let i = currentSlots - 1; i >= maxConcurrent; i--) {
+                        if (slotsContainer.children[i]) {
+                            slotsContainer.children[i].remove();
+                        }
+                    }
+                }
+            }
 
             // Функция обработки обновления задачи
             function handleTaskUpdate(data) {
@@ -266,6 +530,7 @@
                 const status = data.status || 'unknown';
                 const attempt = data.attempt || 1;
                 const message = data.data?.message || '';
+                const progress = data.data?.progress || 0; // получаем прогресс
 
                 addLog(taskId, status, attempt, message);
 
@@ -273,8 +538,12 @@
                     createTaskElement(taskId, status, attempt);
                 }
 
-                updateTaskElement(taskId, status, attempt, data.data || {});
+                updateTaskElement(taskId, status, attempt, {
+                    ...data.data || {},
+                    progress: progress // Передаем прогресс
+                });
                 updateStats();
+                updateSemaphoreSlots(); // Обновляем слоты при изменении статуса
             }
 
             // Функция создания элемента задачи
@@ -289,35 +558,18 @@
                 task.className = `task task-pulse task-${getStatusClass(status)}`;
                 task.id = `task-${taskId}`;
                 task.dataset.taskId = taskId;
-                task.textContent = attempt;
+                task.textContent = attempt; // По умолчанию номер попытки
 
                 // Получаем секцию для текущего статуса
                 const section = getSectionForStatus(status);
 
-                // Случайное вертикальное позиционирование
-                const minTop = 15;
-                const maxTop = 85;
-                let topPos;
+                // Случайная фиксированная вертикальная позиция (15-85%)
+                const topPos = 15 + Math.random() * 70; // 15% - 85%
 
-                // Случайное горизонтальное смещение ВНУТРИ секции
-                const sectionWidth = 18;
-                const sectionStart = section.sectionIndex * 20;
-                const horizontalMargin = 1;
-                const minLeft = sectionStart + horizontalMargin;
-                const maxLeft = sectionStart + sectionWidth - horizontalMargin;
-
-                let leftPos, attempts = 0;
-
-                do {
-                    topPos = minTop + Math.random() * (maxTop - minTop);
-                    leftPos = minLeft + Math.random() * (maxLeft - minLeft);
-                    attempts++;
-
-                    if (attempts > 50) {
-                        console.warn(`Could not find free position for task ${taskId} after ${attempts} attempts`);
-                        break;
-                    }
-                } while (isPositionOccupied(leftPos, topPos, 3, 3));
+                // Фиксированная горизонтальная позиция в центре секции
+                const sectionCenter = section.center;
+                const horizontalJitter = Math.random() * 4 - 2; // ±2% случайное смещение
+                const leftPos = sectionCenter + horizontalJitter;
 
                 task.style.left = `${leftPos}%`;
                 task.style.top = `${topPos}%`;
@@ -331,8 +583,12 @@
                     status: status,
                     attempt: attempt,
                     position: leftPos,
-                    topPosition: topPos,
-                    targetPosition: section.center
+                    topPosition: topPos, // Сохраняем фиксированную позицию
+                    targetPosition: section.center,
+                    verticalPosition: topPos, // Фиксированная вертикальная позиция
+                    horizontalPosition: leftPos, // Фиксированная горизонтальная позиция
+                    currentSection: section.sectionIndex, // Текущая секция
+                    progress: 0 // Начальный прогресс
                 };
 
                 activeTasks++;
@@ -378,20 +634,6 @@
                 return sections[status] || sections.queued;
             }
 
-            // Проверка занятой позиции
-            function isPositionOccupied(leftPos, topPos, hTolerance = 6, vTolerance = 5) {
-                for (const taskId in tasks) {
-                    const task = tasks[taskId];
-                    const hDiff = Math.abs(task.position - leftPos);
-                    const vDiff = Math.abs(task.topPosition - topPos);
-
-                    if (hDiff < hTolerance && vDiff < vTolerance) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-
             // Получаем класс статуса
             function getStatusClass(status) {
                 switch (status) {
@@ -414,7 +656,7 @@
                 }
             }
 
-            // Обновление элемента задачи
+            // Обновление элемента задачи (обновлено - отображение процента)
             function updateTaskElement(taskId, status, attempt, extraData = {}) {
                 const task = tasks[taskId];
                 if (!task) return;
@@ -422,29 +664,71 @@
                 const element = task.element;
                 if (!element) return;
 
+                const oldStatus = task.status;
                 task.status = status;
                 task.attempt = attempt;
 
+                // Обновляем прогресс если есть
+                if (extraData.progress !== undefined) {
+                    task.progress = extraData.progress;
+                }
+
+                // Очищаем классы и добавляем новые
                 element.className = 'task task-pulse';
                 element.classList.add(`task-${getStatusClass(status)}`);
-                element.textContent = attempt;
+
+                // Обновляем текст в зависимости от статуса
+                if (status === 'processing_progress') {
+                    // Показываем процент выполнения для processing_progress
+                    const progress = task.progress || 0;
+                    element.textContent = `${progress}%`;
+                    element.title = `Прогресс: ${progress}% (попытка ${attempt})`;
+                    // Можно добавить стиль для прогресса
+                    element.style.fontSize = '0.45rem'; // Чуть меньше для процентов
+                } else if (status === 'lock_acquired') {
+                    // Для lock_acquired показываем начало выполнения
+                    element.textContent = '▶';
+                    element.title = `Начало выполнения (попытка ${attempt})`;
+                    element.style.fontSize = '0.5rem'; // Восстанавливаем размер
+                } else if (status === 'completed') {
+                    // Для завершенных задач можно показать галочку
+                    element.textContent = '✓';
+                    element.title = `Завершено (попытка ${attempt})`;
+                    element.style.fontSize = '0.5rem';
+                } else if (status === 'failed') {
+                    // Для неудачных задач можно показать крестик
+                    element.textContent = '✗';
+                    element.title = `Ошибка (попытка ${attempt})`;
+                    element.style.fontSize = '0.5rem';
+                } else {
+                    // Для остальных статусов показываем номер попытки
+                    element.textContent = attempt;
+                    element.title = `Попытка ${attempt}`;
+                    element.style.fontSize = '0.5rem'; // Восстанавливаем размер
+                }
 
                 const section = getSectionForStatus(status);
+                const oldSection = task.currentSection;
+                task.currentSection = section.sectionIndex;
 
-                const minTop = 15;
-                const maxTop = 85;
-                const sectionWidth = 18;
-                const sectionStart = section.sectionIndex * 20;
-                const horizontalMargin = 1;
-                const minLeft = sectionStart + horizontalMargin;
-                const maxLeft = sectionStart + sectionWidth - horizontalMargin;
+                // Фиксируем позиции задачи
+                const currentTopPos = task.topPosition;
+                const currentLeftPos = task.position;
 
-                const newTopPos = minTop + Math.random() * (maxTop - minTop);
-                const newLeftPos = minLeft + Math.random() * (maxLeft - minLeft);
+                // Если задача уже в секции In Progress (lock_acquired или processing_progress)
+                // И переходит в ту же секцию - не двигаем!
+                const isInProgressSection = (status === 'lock_acquired' || status === 'processing_progress');
+                const wasInProgressSection = (oldStatus === 'lock_acquired' || oldStatus === 'processing_progress');
 
-                if (status === 'completed' || status === 'failed') {
-                    animateTask(element, task.position, section.center, task.topPosition);
-                    task.position = section.center;
+                if (isInProgressSection && wasInProgressSection) {
+                    // Остаемся на месте в In Progress
+                    // Просто обновляем статус без движения
+                    task.position = currentLeftPos; // Оставляем ту же позицию
+                } else if (status === 'completed' || status === 'failed') {
+                    // Для завершенных задач двигаем в конец
+                    const targetPos = section.center;
+                    animateHorizontalTask(element, currentLeftPos, targetPos, currentTopPos);
+                    task.position = targetPos;
 
                     setTimeout(() => {
                         if (element.parentNode) {
@@ -453,13 +737,26 @@
                             activeTasks--;
                             if (status === 'completed') completedCount++;
                             updateStats();
+                            updateSemaphoreSlots();
                         }
                     }, 800);
+                } else if (oldSection !== section.sectionIndex) {
+                    // Переход между секциями - двигаем в центр новой секции
+                    const targetPos = section.center;
+                    const horizontalJitter = Math.random() * 4 - 2; // ±2% случайное смещение
+                    const newPos = targetPos + horizontalJitter;
+
+                    animateHorizontalTask(element, currentLeftPos, newPos, currentTopPos);
+                    task.position = newPos;
                 } else {
-                    animateTask(element, task.position, newLeftPos, task.topPosition);
-                    animateVerticalPosition(element, task.topPosition, newTopPos);
-                    task.position = newLeftPos;
-                    task.topPosition = newTopPos;
+                    // Остаемся в той же секции, но статус изменился
+                    // Например: checking_lock -> lock_acquired в одной секции
+                    // В этом случае немного смещаем для визуального эффекта
+                    const jitter = Math.random() * 3 - 1.5; // ±1.5% случайное смещение
+                    const newPos = currentLeftPos + jitter;
+
+                    animateHorizontalTask(element, currentLeftPos, newPos, currentTopPos);
+                    task.position = newPos;
                 }
 
                 setTimeout(() => {
@@ -467,32 +764,8 @@
                 }, 300);
             }
 
-            // Анимация вертикального движения
-            function animateVerticalPosition(element, from, to) {
-                const duration = 400;
-                const startTime = performance.now();
-
-                function step(currentTime) {
-                    const elapsed = currentTime - startTime;
-                    const progress = Math.min(elapsed / duration, 1);
-
-                    const easeProgress = progress < 0.5 ?
-                        2 * progress * progress :
-                        1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-                    const currentPos = from + (to - from) * easeProgress;
-                    element.style.top = `${currentPos}%`;
-
-                    if (progress < 1) {
-                        requestAnimationFrame(step);
-                    }
-                }
-
-                requestAnimationFrame(step);
-            }
-
-            // Анимация движения
-            function animateTask(element, from, to, topPosition) {
+            // Анимация только горизонтального движения
+            function animateHorizontalTask(element, fromLeft, toLeft, topPosition) {
                 const duration = 600;
                 const startTime = performance.now();
 
@@ -504,8 +777,11 @@
                         2 * progress * progress :
                         1 - Math.pow(-2 * progress + 2, 2) / 2;
 
-                    const currentPos = from + (to - from) * easeProgress;
+                    const currentPos = fromLeft + (toLeft - fromLeft) * easeProgress;
                     element.style.left = `${currentPos}%`;
+                    // Вертикальная позиция не меняется
+                    element.style.top = `${topPosition}%`;
+                    element.style.transform = 'translateY(-50%)';
 
                     if (progress < 1) {
                         requestAnimationFrame(step);
@@ -529,7 +805,6 @@
                 }
                 document.getElementById('activeLocks').textContent = activeLocks;
 
-                const maxConcurrent = 2;
                 const queueLoad = Math.min((activeTasks / maxConcurrent) * 100, 100);
                 document.getElementById('queueProgress').style.width = `${queueLoad}%`;
                 document.getElementById('queueLoad').textContent = `${Math.round(queueLoad)}%`;
@@ -544,11 +819,11 @@
                 const logEntry = document.createElement('div');
                 logEntry.className = 'log-entry border-b border-gray-800 pb-1 mb-1 text-xs';
                 logEntry.innerHTML = `
-                    <span class="log-time text-blue-400">[${time}]</span>
-                    <span class="text-yellow-300 ml-1">${shortTaskId}</span>
-                    <span class="text-green-400 ml-1">${status.toUpperCase()}</span>
-                    ${message ? `<span class="ml-1">- ${message}</span>` : ''}
-                `;
+            <span class="log-time text-blue-400">[${time}]</span>
+            <span class="text-yellow-300 ml-1">${shortTaskId}</span>
+            <span class="text-green-400 ml-1">${status.toUpperCase()}</span>
+            ${message ? `<span class="ml-1">- ${message}</span>` : ''}
+        `;
 
                 logPanel.appendChild(logEntry);
                 logPanel.scrollTop = logPanel.scrollHeight;
@@ -565,6 +840,8 @@
                     return;
                 }
 
+                addLog('SYSTEM', 'info', 1, `Creating ${count} task(s) with max concurrent = ${maxConcurrent}`);
+
                 fetch('/api/tasks/create', {
                         method: 'POST',
                         headers: {
@@ -572,7 +849,8 @@
                             'X-CSRF-TOKEN': csrfToken
                         },
                         body: JSON.stringify({
-                            count
+                            count: count,
+                            max_concurrent: maxConcurrent
                         })
                     })
                     .then(response => {
@@ -580,15 +858,17 @@
                         return response.json();
                     })
                     .then(data => {
-                        addLog('SYSTEM', 'info', 1, `Created ${count} task(s)`);
+                        addLog('SYSTEM', 'success', 1, `${count} task(s) created successfully`);
                     })
                     .catch(error => {
                         addLog('SYSTEM', 'error', 1, 'Failed to create task');
+                        console.error('Error creating task:', error);
                     });
             }
 
             // Инициализация
             updateStats();
+            updateSemaphoreSlots();
 
             // Периодическое обновление статистики
             setInterval(updateStats, 2000);
@@ -596,6 +876,7 @@
             // Начальное сообщение
             setTimeout(() => {
                 addLog('SYSTEM', 'info', 1, 'Ready to create tasks');
+                addLog('SYSTEM', 'info', 1, `Current max concurrent tasks: ${maxConcurrent}`);
             }, 500);
         });
     </script>

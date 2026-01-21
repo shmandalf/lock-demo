@@ -20,20 +20,33 @@ class ProcessTask implements ShouldQueue
     public int $currentAttempt = 1;
 
     protected string $semaphoreKey = 'task_processing';
-    protected int $semaphoreMaxConcurrent = 2;
+    protected int $semaphoreMaxConcurrent = 2; // Значение по умолчанию
     protected int $semaphoreTimeout = 10;
     protected int $semaphoreAcquireTimeout = 3;
 
     public $tries = 9;
     public $backoff = [2, 5, 10];
 
-    public function __construct(string $taskId, int $initialAttempt = 1)
+    public function __construct(string $taskId, int $initialAttempt = 1, int $maxConcurrent = null)
     {
         $this->taskId = $taskId;
         $this->currentAttempt = $initialAttempt;
 
+        if ($maxConcurrent !== null) {
+            $this->semaphoreMaxConcurrent = max(1, min(10, $maxConcurrent));
+
+            // Обновляем ключ семафора с указанием лимита (опционально)
+            $this->semaphoreKey = "task_processing:max:{$this->semaphoreMaxConcurrent}";
+        }
+
         // ВАЖНО: Отправляем событие сразу при создании задачи!
         $this->broadcast('queued', 'Задача добавлена в очередь', $initialAttempt);
+
+        // Логируем установленное значение
+        Log::info("Task {$this->taskId} created", [
+            'max_concurrent' => $this->semaphoreMaxConcurrent,
+            'semaphore_key' => $this->semaphoreKey,
+        ]);
     }
 
     public function handle(): void
@@ -44,7 +57,8 @@ class ProcessTask implements ShouldQueue
             'job_attempt' => $currentAttempt,
             'property_attempt' => $this->currentAttempt,
             'queue_attempts' => $this->job ? $this->job->attempts() : 'unknown',
-            'max_attempts' => $this->tries
+            'max_attempts' => $this->tries,
+            'max_concurrent' => $this->semaphoreMaxConcurrent,
         ]);
 
         $semaphore = $this->createSemaphore(
@@ -119,7 +133,8 @@ class ProcessTask implements ShouldQueue
             // При ретрае тоже отправляем событие!
             $this->broadcast('queued', 'Повторная попытка', $nextAttempt);
 
-            self::dispatch($this->taskId, $nextAttempt)
+            // При ретрае передаем то же значение maxConcurrent
+            self::dispatch($this->taskId, $nextAttempt, $this->semaphoreMaxConcurrent)
                 ->delay(now()->addSeconds($this->backoff[$currentAttempt - 1] ?? 2));
         } else {
             // Failed
