@@ -37,7 +37,7 @@ sleep 15
 
 # Setup RabbitMQ user
 echo "Setting up RabbitMQ..."
-./vendor/bin/sail exec rabbitmq rabbitmqctl wait --timeout 60
+./vendor/bin/sail exec rabbitmq rabbitmqctl await_startup
 ./vendor/bin/sail exec rabbitmq rabbitmqctl add_user admin admin 2>/dev/null || true
 ./vendor/bin/sail exec rabbitmq rabbitmqctl set_user_tags admin administrator
 ./vendor/bin/sail exec rabbitmq rabbitmqctl set_permissions -p / admin ".*" ".*" ".*"
