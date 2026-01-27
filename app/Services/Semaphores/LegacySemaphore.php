@@ -106,21 +106,29 @@ class LegacySemaphore implements SemaphoreInterface
             // Check TTL for all slots and renew if needed
             for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
                 $slotKey = $this->getSlotKey($slot);
-                if (Redis::ttl($slotKey) == -1) { // Key exists but has no TTL
+                if (Redis::exists($slotKey) && Redis::ttl($slotKey) == -1) {
                     Redis::expire($slotKey, $this->ttl);
                 }
             }
 
-            // Find and acquire an available slot
+            // Find and acquire an available slot with SET and NX
             for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
                 $slotKey = $this->getSlotKey($slot);
 
-                // Use SET with NX and EX for atomic operation
-                if (Redis::set($slotKey, $this->identifier, 'NX', 'EX', $this->ttl)) {
+                // Atomic SET with NX and EX
+                $result = Redis::command('SET', [
+                    $slotKey,
+                    $this->identifier,
+                    'EX',
+                    $this->ttl,
+                    'NX'
+                ]);
+
+                // Check result
+                if ($result !== false && $result !== null) {
                     $this->slotIndex = $slot;
                     $this->isAcquired = true;
-
-                    Log::debug("Legacy semaphore slot acquired: {$slotKey} by {$this->identifier}");
+                    Log::debug("Legacy semaphore slot acquired atomically: {$slotKey} by {$this->identifier}");
                     return true;
                 }
             }
@@ -360,6 +368,7 @@ class LegacySemaphore implements SemaphoreInterface
             $slotKey = $this->getSlotKey($slot);
             $ttl = Redis::ttl($slotKey);
 
+            // Validate only keys with $ttl > 0
             if ($ttl > 0) {
                 if (!$found || $ttl < $minTtl) {
                     $minTtl = $ttl;

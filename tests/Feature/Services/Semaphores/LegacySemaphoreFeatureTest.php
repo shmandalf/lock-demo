@@ -117,29 +117,46 @@ class LegacySemaphoreFeatureTest extends TestCase
 
         // Acquire semaphore
         $acquired = $semaphore->acquire(1);
-        $this->assertTrue($acquired);
+        $this->assertTrue($acquired, 'Should acquire semaphore');
 
-        // Get the slot key
-        $slotKey = 'legacy-semaphore:' . $uniqueKey . '0';
+        // Проверяем, что семафор действительно захвачен
+        $this->assertTrue($semaphore->isAcquiredByMe(), 'Should be acquired by me');
 
-        // Check TTL is set
-        $ttl = Redis::ttl($slotKey);
-        $this->assertGreaterThan(0, $ttl);
-        $this->assertLessThanOrEqual($shortTimeout, $ttl);
+        // Получаем статистику чтобы узнать текущий TTL
+        $stats = $semaphore->getStats();
+        $this->assertGreaterThan(0, $stats->ttl, 'Should have positive TTL');
+
+        // Дополнительно проверяем через Redis напрямую
+        $slotKey = null;
+        try {
+            $reflection = new \ReflectionClass($semaphore);
+            $method = $reflection->getMethod('getSlotKey');
+            $method->setAccessible(true);
+            $slotKey = $method->invoke($semaphore, 0);
+
+            $ttl = Redis::ttl($slotKey);
+            $this->assertGreaterThan(0, $ttl, 'Redis TTL should be positive');
+            $this->assertLessThanOrEqual($shortTimeout, $ttl, 'Redis TTL should be <= timeout');
+        } catch (\ReflectionException $e) {
+            // Если не получается через рефлексию, просто проверяем через семафор
+            $this->assertNotNull($slotKey, 'Should have slot key');
+        }
 
         // Wait for timeout to expire
         sleep($shortTimeout + 1);
 
-        // Slot key should no longer exist
-        $exists = Redis::exists($slotKey);
-        $this->assertEquals(0, $exists, 'Slot should expire after timeout');
+        // Семафор больше не должен быть захвачен
+        $this->assertFalse($semaphore->isAcquiredByMe(), 'Should expire after timeout');
 
-        // Semaphore should no longer be acquired
-        $this->assertFalse($semaphore->isAcquiredByMe());
+        // Проверяем через Redis
+        if ($slotKey) {
+            $ttlAfter = Redis::ttl($slotKey);
+            $this->assertEquals(-2, $ttlAfter, 'Key should not exist after expiry (ttl = -2)');
+        }
 
         // Can acquire again
         $acquiredAgain = $semaphore->acquire(1);
-        $this->assertTrue($acquiredAgain);
+        $this->assertTrue($acquiredAgain, 'Should be able to acquire again after expiry');
 
         // Cleanup
         $semaphore->release();
