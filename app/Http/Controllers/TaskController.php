@@ -13,7 +13,7 @@ class TaskController extends Controller
     public function create(Request $request)
     {
         $validated = $request->validate([
-            'count' => 'required|integer|min:1|max:20',
+            'count' => 'required|integer|min:1|max:100',
             'delay' => 'integer|min:0|max:60',
             'max_concurrent' => 'integer|min:1|max:10',
         ]);
@@ -27,10 +27,10 @@ class TaskController extends Controller
         for ($i = 0; $i < $count; $i++) {
             $taskId = 'task-' . Str::random(6) . '-' . time();
 
-            // Добавляем случайную задержку
+            // Small random delay
             $randomDelay = $delay + ($i * 0.1);
 
-            // Передаем maxConcurrent в конструктор Job
+            // Pass maxConcurrent into the Job constructor
             ProcessTask::dispatch($taskId, 1, $maxConcurrent)
                 ->delay(now()->addSeconds($randomDelay));
 
@@ -42,83 +42,18 @@ class TaskController extends Controller
             'task_ids' => $taskIds,
             'count' => $count,
             'max_concurrent' => $maxConcurrent,
-            'message' => "{$count} task(s) queued with max concurrent = {$maxConcurrent}"
+            'message' => "{$count} task(s) queued with max concurrent = {$maxConcurrent}",
         ]);
-    }
-
-    public function stats()
-    {
-        try {
-            // Статистика семафоров
-            $semaphoreStats = [];
-
-            // Получаем все ключи семафоров
-            $semaphoreKeys = Redis::keys('semaphore:*');
-
-            foreach ($semaphoreKeys as $key) {
-                $holders = Redis::zrange($key, 0, -1, 'WITHSCORES');
-                $count = count($holders) / 2; // Каждый holder имеет score
-
-                // Извлекаем max_concurrent из имени ключа или метаданных
-                $maxConcurrent = 2; // По умолчанию
-                if (preg_match('/max:(\d+)/', $key, $matches)) {
-                    $maxConcurrent = $matches[1];
-                }
-
-                $semaphoreStats[] = [
-                    'key' => $key,
-                    'current' => $count,
-                    'max_concurrent' => (int)$maxConcurrent,
-                    'holders' => array_chunk($holders, 2),
-                    'ttl' => Redis::ttl($key),
-                    'available' => max(0, $maxConcurrent - $count),
-                ];
-            }
-
-            // Статистика Redis блокировок
-            $lockStats = [];
-            $lockPatterns = ['laravel_database_task_semaphore', 'task_semaphore'];
-
-            foreach ($lockPatterns as $pattern) {
-                for ($i = 0; $i < 5; $i++) {
-                    $lockKey = "{$pattern}_{$i}";
-                    if (Cache::has($lockKey)) {
-                        $lockStats[] = [
-                            'type' => 'lock',
-                            'key' => $lockKey,
-                            'ttl' => Redis::ttl($lockKey),
-                        ];
-                    }
-                }
-            }
-
-            return response()->json([
-                'semaphores' => $semaphoreStats,
-                'locks' => $lockStats,
-                'semaphore_explanation' => [
-                    'type' => 'Redis-based counting semaphore',
-                    'max_concurrent' => 'Configurable via frontend',
-                    'purpose' => 'Limit concurrent task processing',
-                    'implementation' => 'Redis sorted set with timestamps',
-                ],
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => $e->getMessage(),
-                'semaphores' => [],
-                'locks' => [],
-            ], 500);
-        }
     }
 
     public function clear()
     {
         try {
-            // Очищаем очередь
+            // Clear queue
             $pendingCount = Redis::llen('queues:default');
             Redis::del('queues:default');
 
-            // Освобождаем все возможные блокировки
+            // Release all available locks
             $clearedLocks = [];
             $lockPatterns = [
                 'laravel_database_task_semaphore',
@@ -133,14 +68,13 @@ class TaskController extends Controller
                     }
                 }
 
-                // Также очищаем без номера
                 if (Cache::forget($pattern)) {
                     $clearedLocks[] = $pattern;
                 }
             }
 
-            // Очищаем все семафоры
-            $semaphoreKeys = Redis::keys('semaphore:*');
+            // Delete all semaphores
+            $semaphoreKeys = array_merge(Redis::keys('semaphore:*'), Redis::keys('semaphore-legacy:'));
             $clearedSemaphores = [];
 
             foreach ($semaphoreKeys as $key) {
@@ -156,7 +90,7 @@ class TaskController extends Controller
                     'pending_jobs' => $pendingCount,
                     'locks' => $clearedLocks,
                     'semaphores' => $clearedSemaphores,
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -169,7 +103,7 @@ class TaskController extends Controller
     public function health()
     {
         try {
-            // Проверяем Redis
+            // Redis
             Redis::ping();
             $redisStatus = 'ok';
         } catch (\Exception $e) {
@@ -177,7 +111,7 @@ class TaskController extends Controller
         }
 
         try {
-            // Проверяем Soketi/WebSocket
+            // Soketi/WebSocket
             $host = config('broadcasting.connections.pusher.options.host');
             $port = config('broadcasting.connections.pusher.options.port');
 

@@ -4,11 +4,11 @@
 
 <div align="center">
 
-![Demo Preview](https://img.shields.io/badge/Status-Active-brightgreen)
+![Статус](https://img.shields.io/badge/Статус-Активный-brightgreen)
 ![Laravel](https://img.shields.io/badge/Laravel-12.x-FF2D20?logo=laravel)
 ![PHP](https://img.shields.io/badge/PHP-8.5-777BB4?logo=php)
-![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis)
-![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq)
+![CI/CD](https://github.com/shmandalf/lock-demo/actions/workflows/ci.yml/badge.svg)
+![MIT](https://img.shields.io/badge/Лицензия-MIT-yellow)
 
 *Интерактивная визуализация работы распределенных семафоров в реальном времени*
 

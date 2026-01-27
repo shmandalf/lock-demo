@@ -29,10 +29,14 @@ services:
         networks:
             - locks
         depends_on:
-            - mysql
-            - redis
-            - rabbitmq
-            - soketi
+            mysql:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            soketi:
+                condition: service_started
     mysql:
         image: 'mysql:8.4'
         ports:

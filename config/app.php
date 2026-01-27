@@ -123,4 +123,18 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Semaphore Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Default class to use for semaphore implementations.
+    |
+    | Available options:
+    | - \App\Services\Semaphores\RedisSemaphore (recommended)
+    | - \App\Services\Semaphores\LegacySemaphore (legacy)
+    |
+    */
+    'semaphore_class' => env('SEMAPHORE_CLASS', \App\Services\Semaphores\RedisSemaphore::class),
+
 ];
