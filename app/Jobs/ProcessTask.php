@@ -207,6 +207,8 @@ class ProcessTask implements ShouldQueue
             // Broadcast progress update
             $this->broadcastWithProgress($i, $steps, "Processing: {$i}/{$steps} steps", $attempt);
         }
+
+        $this->broadcast('completed', 'Task failed after all retry attempts');
     }
 
     /**
