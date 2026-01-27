@@ -1,0 +1,14 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - database/
+        - routes/
+
+    level: 5
+
+    # Игнорируем эти ошибки (если нужно)
+    ignoreErrors:
+        - '#Call to an undefined static method#'
