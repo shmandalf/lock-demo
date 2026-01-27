@@ -28,11 +28,11 @@ class SemaphoreFactory
      *
      * @param string $key Unique identifier for the semaphore
      * @param int $maxConcurrent Maximum number of concurrent acquisitions
-     * @param int $timeout Timeout in seconds for automatic release
+     * @param int $ttl Timeout in seconds for automatic release
      * @return SemaphoreInterface
      * @throws \InvalidArgumentException If parameters are invalid
      */
-    public function create(string $key, int $maxConcurrent, int $timeout): SemaphoreInterface
+    public function create(string $key, int $maxConcurrent, int $ttl): SemaphoreInterface
     {
         // Validate arguments for reliability
         if (empty(trim($key))) {
@@ -43,11 +43,11 @@ class SemaphoreFactory
             throw new \InvalidArgumentException("Max concurrent must be at least 1");
         }
 
-        if ($timeout < 1) {
-            throw new \InvalidArgumentException("Timeout must be at least 1 second");
+        if ($ttl < 1) {
+            throw new \InvalidArgumentException("Semaphore TTL must be at least 1 second");
         }
 
         // Create and return the semaphore instance
-        return new $this->className($key, $maxConcurrent, $timeout);
+        return new $this->className($key, $maxConcurrent, $ttl);
     }
 }

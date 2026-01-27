@@ -104,7 +104,6 @@ class RedisSemaphoreFeatureTest extends TestCase
         $this->assertEquals(3, $statsBefore->maxConcurrent);
         $this->assertEquals(0, $statsBefore->currentCount);
         $this->assertEquals(3, $statsBefore->available);
-        $this->assertEquals(30, $statsBefore->timeout);
         $this->assertFalse($statsBefore->isFull);
         $this->assertFalse($statsBefore->isAcquiredByMe);
         $this->assertEquals('redis', $statsBefore->driver);

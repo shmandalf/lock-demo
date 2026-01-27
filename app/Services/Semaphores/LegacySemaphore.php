@@ -22,9 +22,9 @@ class LegacySemaphore implements SemaphoreInterface
     private int $maxConcurrent;
 
     /**
-     * Timeout in seconds for automatic release
+     * TTL in seconds for automatic release
      */
-    private int $timeout;
+    private int $ttl;
 
     /**
      * Unique identifier for this process instance
@@ -51,29 +51,34 @@ class LegacySemaphore implements SemaphoreInterface
      *
      * @param string $key Semaphore identifier (without prefix)
      * @param int $maxConcurrent Maximum number of concurrent acquisitions
-     * @param int $timeout Timeout in seconds for automatic release
+     * @param int $ttl TTL in seconds for automatic release
      */
-    public function __construct(string $key, int $maxConcurrent = 3, int $timeout = 30)
+    public function __construct(string $key, int $maxConcurrent = 3, int $ttl = 30)
     {
         $this->redisKey = self::KEY_PREFIX . $key;
         $this->maxConcurrent = $maxConcurrent;
-        $this->timeout = $timeout;
+        $this->ttl = $ttl;
         $this->identifier = $this->generateIdentifier();
     }
 
     /**
      * Acquire semaphore with timeout
+     *
+     * @param int $acquireTimeout Maximum wait time in seconds
+     *                            Any value is accepted, developer's responsibility
      */
-    public function acquire(int $timeout): bool
+    public function acquire(int $acquireTimeout): bool
     {
-        if ($timeout < 1) {
-            throw new \InvalidArgumentException("Timeout must be at least 1 second");
+        // No validation - developer's responsibility to provide sensible timeout
+        if ($acquireTimeout <= 0) {
+            // Zero or negative timeout means non-blocking attempt
+            return $this->acquireInternal();
         }
 
         $startTime = microtime(true);
         $attempt = 0;
 
-        while ((microtime(true) - $startTime) < $timeout) {
+        while ((microtime(true) - $startTime) < $acquireTimeout) {
             $attempt++;
 
             if ($this->acquireInternal()) {
@@ -86,7 +91,7 @@ class LegacySemaphore implements SemaphoreInterface
             usleep(min(500000, 100000 * $attempt));
         }
 
-        Log::debug("Legacy semaphore timeout after {$timeout}s, {$attempt} attempts");
+        Log::debug("Legacy semaphore timeout after {$acquireTimeout}s, {$attempt} attempts");
         return false;
     }
 
@@ -102,7 +107,7 @@ class LegacySemaphore implements SemaphoreInterface
             for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
                 $slotKey = $this->getSlotKey($slot);
                 if (Redis::ttl($slotKey) == -1) { // Key exists but has no TTL
-                    Redis::expire($slotKey, $this->timeout);
+                    Redis::expire($slotKey, $this->ttl);
                 }
             }
 
@@ -111,7 +116,7 @@ class LegacySemaphore implements SemaphoreInterface
                 $slotKey = $this->getSlotKey($slot);
 
                 // Use SET with NX and EX for atomic operation
-                if (Redis::set($slotKey, $this->identifier, 'NX', 'EX', $this->timeout)) {
+                if (Redis::set($slotKey, $this->identifier, 'NX', 'EX', $this->ttl)) {
                     $this->slotIndex = $slot;
                     $this->isAcquired = true;
 
@@ -201,7 +206,6 @@ class LegacySemaphore implements SemaphoreInterface
                 maxConcurrent: $this->maxConcurrent,
                 currentCount: $currentCount,
                 available: $this->maxConcurrent - $currentCount,
-                timeout: $this->timeout,
                 ttl: $this->getMinTtl(),
                 isFull: $currentCount >= $this->maxConcurrent,
                 identifier: $this->identifier,
@@ -259,9 +263,9 @@ class LegacySemaphore implements SemaphoreInterface
      *
      * @return int Timeout value
      */
-    public function getTimeout(): int
+    public function getTtl(): int
     {
-        return $this->timeout;
+        return $this->ttl;
     }
 
     /**

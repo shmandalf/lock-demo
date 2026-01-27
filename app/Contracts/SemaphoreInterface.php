@@ -18,11 +18,11 @@ interface SemaphoreInterface
      * Blocks execution until a semaphore slot becomes available
      * or the timeout expires.
      *
-     * @param int $timeout Maximum wait time in seconds.
-     *                     Minimum 1 second.
+     * @param int $acquireTimeout Maximum wait time in seconds.
+     *                            Minimum 1 second.
      * @return bool true - semaphore acquired, false - failed to acquire
      */
-    public function acquire(int $timeout): bool;
+    public function acquire(int $acquireTimeout): bool;
 
     /**
      * Release the acquired semaphore
@@ -65,10 +65,10 @@ interface SemaphoreInterface
     public function getMaxConcurrent(): int;
 
     /**
-     * Get the semaphore timeout in seconds
+     * Get the semaphore TTL in seconds
      *
      * @return int Time in seconds after which acquisition is automatically
      *             released due to inactivity
      */
-    public function getTimeout(): int;
+    public function getTtl(): int;
 }

@@ -22,9 +22,9 @@ class RedisSemaphore implements SemaphoreInterface
     private int $maxConcurrent;
 
     /**
-     * Timeout in seconds for automatic release
+     * TTL in seconds for automatic release
      */
-    private int $timeout;
+    private int $ttl;
 
     /**
      * Unique identifier for this process instance
@@ -41,26 +41,26 @@ class RedisSemaphore implements SemaphoreInterface
      *
      * @param string $key Semaphore identifier (without prefix)
      * @param int $maxConcurrent Maximum number of concurrent acquisitions
-     * @param int $timeout Timeout in seconds for automatic release
+     * @param int $ttl Timeout in seconds for automatic release
      */
-    public function __construct(string $key, int $maxConcurrent = 3, int $timeout = 30)
+    public function __construct(string $key, int $maxConcurrent = 3, int $ttl = 30)
     {
         $this->redisKey = self::KEY_PREFIX . $key;
         $this->maxConcurrent = $maxConcurrent;
-        $this->timeout = $timeout;
+        $this->ttl = $ttl;
         $this->identifier = $this->generateIdentifier();
     }
 
     /**
      * Acquire semaphore with timeout
      *
-     * @param int $timeout Maximum wait time in seconds
-     *                     Any value is accepted, developer's responsibility
+     * @param int $acquireTimeout Maximum wait time in seconds
+     *                            Any value is accepted, developer's responsibility
      */
-    public function acquire(int $timeout): bool
+    public function acquire(int $acquireTimeout): bool
     {
         // No validation - developer's responsibility to provide sensible timeout
-        if ($timeout <= 0) {
+        if ($acquireTimeout <= 0) {
             // Zero or negative timeout means non-blocking attempt
             return $this->acquireInternal();
         }
@@ -68,7 +68,7 @@ class RedisSemaphore implements SemaphoreInterface
         $startTime = microtime(true);
         $attempt = 0;
 
-        while ((microtime(true) - $startTime) < $timeout) {
+        while ((microtime(true) - $startTime) < $acquireTimeout) {
             $attempt++;
 
             if ($this->acquireInternal()) {
@@ -123,7 +123,7 @@ LUA;
                 $this->redisKey,
                 $this->identifier,
                 $currentTime,
-                $this->timeout,
+                $this->ttl,
                 $this->maxConcurrent
             );
 
@@ -195,7 +195,7 @@ LUA;
                 local key = KEYS[1]
                 local identifier = ARGV[1]
                 local current_time = tonumber(ARGV[2])
-                local timeout = tonumber(ARGV[3])
+                local ttl = tonumber(ARGV[3])
 
                 -- Get timestamp when identifier was added
                 local score = redis.call('ZSCORE', key, identifier)
@@ -205,7 +205,7 @@ LUA;
                 end
 
                 -- Check if expired
-                if (current_time - tonumber(score)) > timeout then
+                if (current_time - tonumber(score)) > ttl then
                     redis.call('ZREM', key, identifier)
                     return 0
                 end
@@ -213,7 +213,7 @@ LUA;
                 return 1
 LUA;
 
-            $result = Redis::eval($lua, 1, $this->redisKey, $this->identifier, $currentTime, $this->timeout);
+            $result = Redis::eval($lua, 1, $this->redisKey, $this->identifier, $currentTime, $this->ttl);
             return $result === 1;
         } catch (\Exception $e) {
             Log::error("Semaphore check acquired error: " . $e->getMessage());
@@ -236,10 +236,10 @@ LUA;
             $lua = <<<'LUA'
                 local key = KEYS[1]
                 local current_time = tonumber(ARGV[1])
-                local timeout = tonumber(ARGV[2])
+                local ttl = tonumber(ARGV[2])
 
                 -- Clean up expired entries
-                redis.call('ZREMRANGEBYSCORE', key, 0, current_time - timeout)
+                redis.call('ZREMRANGEBYSCORE', key, 0, current_time - ttl)
 
                 local count = redis.call('ZCARD', key)
                 local ttl = redis.call('TTL', key)
@@ -247,7 +247,7 @@ LUA;
                 return {count, ttl}
 LUA;
 
-            $result = Redis::eval($lua, 1, $this->redisKey, $currentTime, $this->timeout);
+            $result = Redis::eval($lua, 1, $this->redisKey, $currentTime, $this->ttl);
             $count = $result[0] ?? 0;
             $ttl = $result[1] ?? 0;
 
@@ -259,7 +259,6 @@ LUA;
                 maxConcurrent: $this->maxConcurrent,
                 currentCount: $count,
                 available: $this->maxConcurrent - $count,
-                timeout: $this->timeout,
                 ttl: $ttl > 0 ? $ttl : 0,
                 isFull: $count >= $this->maxConcurrent,
                 identifier: $this->identifier,
@@ -292,13 +291,13 @@ LUA;
             $lua = <<<'LUA'
                 local key = KEYS[1]
                 local current_time = tonumber(ARGV[1])
-                local timeout = tonumber(ARGV[2])
+                local ttl = tonumber(ARGV[2])
 
-                redis.call('ZREMRANGEBYSCORE', key, 0, current_time - timeout)
+                redis.call('ZREMRANGEBYSCORE', key, 0, current_time - ttl)
                 return redis.call('ZCARD', key)
 LUA;
 
-            return Redis::eval($lua, 1, $this->redisKey, $currentTime, $this->timeout) ?: 0;
+            return Redis::eval($lua, 1, $this->redisKey, $currentTime, $this->ttl) ?: 0;
         } catch (\Exception $e) {
             Log::error("Semaphore count error: " . $e->getMessage());
             return 0;
@@ -316,13 +315,13 @@ LUA;
     }
 
     /**
-     * Get semaphore timeout in seconds
+     * Get semaphore TTL in seconds
      *
      * @return int Timeout value
      */
-    public function getTimeout(): int
+    public function getTtl(): int
     {
-        return $this->timeout;
+        return $this->ttl;
     }
 
     /**

@@ -6,120 +6,169 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 use App\Traits\BroadcastsTaskStatus;
 use Illuminate\Support\Facades\Log;
+use App\Facades\Semaphore;
+use App\Contracts\SemaphoreInterface;
 
 class ProcessTask implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable;
     use BroadcastsTaskStatus;
 
+    /**
+     * Base semaphore key name for task processing
+     *
+     * Combined with {@see self::$maxConcurrent} to create unique keys
+     * for jobs with different concurrency limits.
+     * Example: 'task_processing:3' for maxConcurrent=3
+     */
+    private const SEMAPHORE_KEY = 'task_processing';
+
+    /**
+     * Semaphore TTL in seconds (automatic release)
+     */
+    private const SEMAPHORE_TTL = 30;
+
+    /**
+     * Maximum time to wait for semaphore acquisition in seconds
+     */
+    private const SEMAPHORE_ACQUIRE_TIMEOUT = 10;
+
+    /**
+     * Task identifier
+     */
     public string $taskId;
+
+    /**
+     * Current retry attempt number
+     */
     public int $currentAttempt = 1;
 
-    protected string $semaphoreKey = 'task_processing';
-    protected int $semaphoreMaxConcurrent = 2; // Значение по умолчанию
-    protected int $semaphoreTimeout = 10;
-    protected int $semaphoreAcquireTimeout = 3;
+    /**
+     * Maximum number of concurrent tasks allowed
+     */
+    protected int $maxConcurrent;
 
+    /**
+     * Maximum number of retry attempts
+     */
     public $tries = 9;
+
+    /**
+     * Backoff intervals between retries (in seconds)
+     */
     public $backoff = [2, 5, 10];
 
-    public function __construct(string $taskId, int $initialAttempt = 1, int $maxConcurrent = null)
+    /**
+     * Create a new job instance
+     *
+     * @param string $taskId Unique task identifier
+     * @param int $initialAttempt Initial attempt number (default: 1)
+     * @param int $maxConcurrent Maximum concurrent task processing (default: 2)
+     */
+    public function __construct(string $taskId, int $initialAttempt = 1, int $maxConcurrent = 2)
     {
         $this->taskId = $taskId;
         $this->currentAttempt = $initialAttempt;
+        $this->maxConcurrent = $maxConcurrent;
 
-        if ($maxConcurrent !== null) {
-            $this->semaphoreMaxConcurrent = max(1, min(10, $maxConcurrent));
+        // IMPORTANT: Broadcast status immediately when job is created
+        $this->broadcast('queued', 'Task added to queue', $initialAttempt);
 
-            // Обновляем ключ семафора с указанием лимита (опционально)
-            $this->semaphoreKey = "task_processing:max:{$this->semaphoreMaxConcurrent}";
-        }
-
-        // ВАЖНО: Отправляем событие сразу при создании задачи!
-        $this->broadcast('queued', 'Задача добавлена в очередь', $initialAttempt);
-
-        // Логируем установленное значение
+        // Log creation details
         Log::info("Task {$this->taskId} created", [
-            'max_concurrent' => $this->semaphoreMaxConcurrent,
-            'semaphore_key' => $this->semaphoreKey,
+            'max_concurrent' => $this->maxConcurrent,
         ]);
     }
 
+    /**
+     * Execute the job
+     */
     public function handle(): void
     {
         $currentAttempt = $this->getCurrentAttempt();
 
-        Log::info("Task {$this->taskId} started", [
+        Log::info("Task {$this->taskId} started processing", [
             'job_attempt' => $currentAttempt,
             'property_attempt' => $this->currentAttempt,
             'queue_attempts' => $this->job ? $this->job->attempts() : 'unknown',
             'max_attempts' => $this->tries,
-            'max_concurrent' => $this->semaphoreMaxConcurrent,
+            'max_concurrent' => $this->maxConcurrent,
         ]);
 
-        $semaphore = $this->createSemaphore(
-            $this->semaphoreKey,
-            $this->semaphoreMaxConcurrent,
-            $this->semaphoreTimeout
+        // Semaphore key based on the number of $maxConcurrent, so Jobs with different $maxConcurrent would be separated
+        // This is just for demo purposes
+        $semaphoreKey = self::SEMAPHORE_KEY . ':' . $this->maxConcurrent;
+
+        // Create semaphore instance for coordination
+        $semaphore = Semaphore::create(
+            $semaphoreKey,
+            $this->maxConcurrent,
+            self::SEMAPHORE_TTL
         );
 
         try {
-            $this->broadcast('processing', 'Начинаем обработку', $currentAttempt);
+            $this->broadcast('processing', 'Starting processing', $currentAttempt);
             sleep(rand(1, 2));
 
-            $this->broadcast('checking_lock', 'Проверка семафора', $currentAttempt);
+            $this->broadcast('checking_lock', 'Checking semaphore availability', $currentAttempt);
 
-            if ($this->acquireSemaphore($semaphore, $this->semaphoreAcquireTimeout)) {
+            // Attempt to acquire semaphore
+            if ($semaphore->acquire(self::SEMAPHORE_ACQUIRE_TIMEOUT)) {
                 $this->handleAcquiredSemaphore($semaphore, $currentAttempt);
             } else {
                 $this->handleSemaphoreUnavailable($semaphore, $currentAttempt);
             }
         } finally {
-            $this->releaseSemaphore($semaphore);
+            // Always ensure semaphore is released
+            $semaphore->release();
         }
     }
 
     /**
-     * Обработка когда семафор захвачен
+     * Handle successful semaphore acquisition
+     *
+     * @param SemaphoreInterface $semaphore Acquired semaphore instance
+     * @param int $attempt Current attempt number
      */
-    private function handleAcquiredSemaphore($semaphore, int $attempt): void
+    private function handleAcquiredSemaphore(SemaphoreInterface $semaphore, int $attempt): void
     {
-        // Семафор захвачен
-        $stats = $this->getSemaphoreStats($semaphore);
-        $currentCount = $stats['current_count'] ?? 0;
+        // Get semaphore statistics
+        $stats = $semaphore->getStats();
+        $currentCount = $stats->currentCount;
 
         $this->broadcast(
             'lock_acquired',
-            "Семафор захвачен! ({$currentCount}/{$this->semaphoreMaxConcurrent} слотов занято)",
+            "Semaphore acquired! ({$currentCount}/{$this->maxConcurrent} slots occupied)",
             $attempt
         );
 
-        sleep(rand(1, 2));
-
-        // Обработка с прогрессом
+        // Process with progress updates
         $this->processWithProgress($attempt);
 
-        // Завершено успешно
-        $this->broadcast('completed', 'Задача завершена!', $attempt);
+        // Task completed successfully
+        $this->broadcast('completed', 'Task completed successfully!', $attempt);
     }
 
     /**
      * Handle unavailable semaphore (retry logic)
+     *
+     * @param SemaphoreInterface $semaphore Semaphore instance
+     * @param int $currentAttempt Current attempt number
      */
-    private function handleSemaphoreUnavailable($semaphore, int $currentAttempt): void
+    private function handleSemaphoreUnavailable(SemaphoreInterface $semaphore, int $currentAttempt): void
     {
-        $stats = $this->getSemaphoreStats($semaphore);
-        $currentCount = $stats['current_count'] ?? 0;
+        // Get semaphore statistics for logging
+        $stats = $semaphore->getStats();
+        $currentCount = $stats->currentCount;
         $remainingAttempts = $this->tries - $currentAttempt;
 
-        // Lock failed
+        // Broadcast lock failure
         $this->broadcast(
             'lock_failed',
-            "Не удалось захватить семафор ({$currentCount}/{$this->semaphoreMaxConcurrent}). " .
-                "Осталось попыток: {$remainingAttempts}",
+            "Failed to acquire semaphore ({$currentCount}/{$this->maxConcurrent} occupied). " .
+                "Remaining attempts: {$remainingAttempts}",
             $currentAttempt
         );
 
@@ -129,21 +178,23 @@ class ProcessTask implements ShouldQueue
             $nextAttempt = $currentAttempt + 1;
             Log::info("Task {$this->taskId} will retry with new job (attempt {$nextAttempt})");
 
-            // При ретрае тоже отправляем событие!
-            $this->broadcast('queued', 'Повторная попытка', $nextAttempt);
+            // Broadcast queued status for retry
+            $this->broadcast('queued', 'Retrying task', $nextAttempt);
 
-            // При ретрае передаем то же значение maxConcurrent
-            self::dispatch($this->taskId, $nextAttempt, $this->semaphoreMaxConcurrent)
+            // Dispatch new job with same maxConcurrent value
+            self::dispatch($this->taskId, $nextAttempt, $this->maxConcurrent)
                 ->delay(now()->addSeconds($this->backoff[$currentAttempt - 1] ?? 2));
         } else {
-            // Failed
-            $this->broadcast('failed', 'Задача завершилась с ошибкой после всех попыток', $currentAttempt);
+            // Final failure after all attempts
+            $this->broadcast('failed', 'Task failed after all retry attempts', $currentAttempt);
             throw new \Exception("Semaphore unavailable after {$this->tries} attempts");
         }
     }
 
     /**
-     * Process with progress updates
+     * Process task with progress updates
+     *
+     * @param int $attempt Current attempt number
      */
     private function processWithProgress(int $attempt): void
     {
@@ -152,22 +203,35 @@ class ProcessTask implements ShouldQueue
 
         for ($i = 1; $i <= $steps; $i++) {
             sleep($stepTime + rand(0, 1));
-            // Progress
-            $this->broadcastWithProgress($i, $steps, "Обработка: {$i}/{$steps} шагов", $attempt);
+
+            // Broadcast progress update
+            $this->broadcastWithProgress($i, $steps, "Processing: {$i}/{$steps} steps", $attempt);
         }
     }
 
+    /**
+     * Get current attempt number
+     *
+     * @return int Current attempt
+     */
     protected function getCurrentAttempt(): int
     {
         return $this->currentAttempt;
     }
 
+    /**
+     * Handle job failure
+     *
+     * @param \Throwable $exception Exception that caused failure
+     */
     public function failed(\Throwable $exception): void
     {
         $currentAttempt = $this->getCurrentAttempt();
-        Log::error("Task {$this->taskId} failed permanently after {$currentAttempt} attempts: " . $exception->getMessage());
 
-        // Failed при ошибке
-        $this->broadcast('failed', 'Задача завершилась с ошибкой', $currentAttempt);
+        Log::error("Task {$this->taskId} failed permanently after {$currentAttempt} attempts: " .
+            $exception->getMessage());
+
+        // Broadcast final failure status
+        $this->broadcast('failed', 'Task failed with error', $currentAttempt);
     }
 }
