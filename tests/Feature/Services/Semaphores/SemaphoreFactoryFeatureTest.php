@@ -2,9 +2,9 @@
 
 namespace Tests\Feature\Services\Semaphores;
 
-use App\Services\Semaphores\SemaphoreFactory;
-use App\Services\Semaphores\RedisSemaphore;
 use App\Services\Semaphores\LegacySemaphore;
+use App\Services\Semaphores\RedisSemaphore;
+use App\Services\Semaphores\SemaphoreFactory;
 use Tests\TestCase;
 
 class SemaphoreFactoryFeatureTest extends TestCase

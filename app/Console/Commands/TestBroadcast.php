@@ -2,13 +2,14 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Events\TaskStatusChanged;
+use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
 class TestBroadcast extends Command
 {
     protected $signature = 'broadcast:test';
+
     protected $description = 'Test broadcasting system';
 
     public function handle()
@@ -21,8 +22,8 @@ class TestBroadcast extends Command
         $this->info("   Driver: {$driver}");
 
         $pusherConfig = config('broadcasting.connections.pusher');
-        $this->info("   Pusher Host: " . ($pusherConfig['options']['host'] ?? 'not set'));
-        $this->info("   Pusher Port: " . ($pusherConfig['options']['port'] ?? 'not set'));
+        $this->info('   Pusher Host: ' . ($pusherConfig['options']['host'] ?? 'not set'));
+        $this->info('   Pusher Port: ' . ($pusherConfig['options']['port'] ?? 'not set'));
 
         // 2. Тестируем broadcast
         $this->info('2. Testing broadcast...');

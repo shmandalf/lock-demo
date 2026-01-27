@@ -2,19 +2,19 @@
 
 namespace App\Jobs;
 
+use App\Contracts\SemaphoreInterface;
+use App\Facades\Semaphore;
+use App\Traits\BroadcastsTaskStatus;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
-use App\Traits\BroadcastsTaskStatus;
 use Illuminate\Support\Facades\Log;
-use App\Facades\Semaphore;
-use App\Contracts\SemaphoreInterface;
 
 class ProcessTask implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable;
     use BroadcastsTaskStatus;
+    use Dispatchable, InteractsWithQueue, Queueable;
 
     /**
      * Base semaphore key name for task processing
@@ -63,9 +63,9 @@ class ProcessTask implements ShouldQueue
     /**
      * Create a new job instance
      *
-     * @param string $taskId Unique task identifier
-     * @param int $initialAttempt Initial attempt number (default: 1)
-     * @param int $maxConcurrent Maximum concurrent task processing (default: 2)
+     * @param  string  $taskId  Unique task identifier
+     * @param  int  $initialAttempt  Initial attempt number (default: 1)
+     * @param  int  $maxConcurrent  Maximum concurrent task processing (default: 2)
      */
     public function __construct(string $taskId, int $initialAttempt = 1, int $maxConcurrent = 2)
     {
@@ -129,8 +129,8 @@ class ProcessTask implements ShouldQueue
     /**
      * Handle successful semaphore acquisition
      *
-     * @param SemaphoreInterface $semaphore Acquired semaphore instance
-     * @param int $attempt Current attempt number
+     * @param  SemaphoreInterface  $semaphore  Acquired semaphore instance
+     * @param  int  $attempt  Current attempt number
      */
     private function handleAcquiredSemaphore(SemaphoreInterface $semaphore, int $attempt): void
     {
@@ -154,8 +154,8 @@ class ProcessTask implements ShouldQueue
     /**
      * Handle unavailable semaphore (retry logic)
      *
-     * @param SemaphoreInterface $semaphore Semaphore instance
-     * @param int $currentAttempt Current attempt number
+     * @param  SemaphoreInterface  $semaphore  Semaphore instance
+     * @param  int  $currentAttempt  Current attempt number
      */
     private function handleSemaphoreUnavailable(SemaphoreInterface $semaphore, int $currentAttempt): void
     {
@@ -194,7 +194,7 @@ class ProcessTask implements ShouldQueue
     /**
      * Process task with progress updates
      *
-     * @param int $attempt Current attempt number
+     * @param  int  $attempt  Current attempt number
      */
     private function processWithProgress(int $attempt): void
     {
@@ -224,7 +224,7 @@ class ProcessTask implements ShouldQueue
     /**
      * Handle job failure
      *
-     * @param \Throwable $exception Exception that caused failure
+     * @param  \Throwable  $exception  Exception that caused failure
      */
     public function failed(\Throwable $exception): void
     {

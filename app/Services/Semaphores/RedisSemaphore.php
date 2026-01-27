@@ -4,10 +4,10 @@ namespace App\Services\Semaphores;
 
 use App\Contracts\SemaphoreInterface;
 use App\Services\Semaphores\DTO\Stats;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use DateTimeImmutable;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
 
 class RedisSemaphore implements SemaphoreInterface
 {
@@ -39,9 +39,9 @@ class RedisSemaphore implements SemaphoreInterface
     /**
      * Create a new Redis semaphore instance
      *
-     * @param string $key Semaphore identifier (without prefix)
-     * @param int $maxConcurrent Maximum number of concurrent acquisitions
-     * @param int $ttl Timeout in seconds for automatic release
+     * @param  string  $key  Semaphore identifier (without prefix)
+     * @param  int  $maxConcurrent  Maximum number of concurrent acquisitions
+     * @param  int  $ttl  Timeout in seconds for automatic release
      */
     public function __construct(string $key, int $maxConcurrent = 3, int $ttl = 30)
     {
@@ -54,8 +54,8 @@ class RedisSemaphore implements SemaphoreInterface
     /**
      * Acquire semaphore with timeout
      *
-     * @param int $acquireTimeout Maximum wait time in seconds
-     *                            Any value is accepted, developer's responsibility
+     * @param  int  $acquireTimeout  Maximum wait time in seconds
+     *                               Any value is accepted, developer's responsibility
      */
     public function acquire(int $acquireTimeout): bool
     {
@@ -73,6 +73,7 @@ class RedisSemaphore implements SemaphoreInterface
 
             if ($this->acquireInternal()) {
                 Log::debug("Acquired on attempt {$attempt}");
+
                 return true;
             }
 
@@ -130,13 +131,16 @@ LUA;
             if ($result === 1) {
                 $currentCount = $this->getCurrentCount();
                 Log::debug("Semaphore {$this->redisKey} acquired by {$this->identifier}, count: {$currentCount}/{$this->maxConcurrent}");
+
                 return true;
             } else {
                 Log::debug("Semaphore {$this->redisKey} is full, count: " . $this->getCurrentCount() . "/{$this->maxConcurrent}");
+
                 return false;
             }
         } catch (\Exception $e) {
-            Log::error("Semaphore acquire error: " . $e->getMessage());
+            Log::error('Semaphore acquire error: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -169,13 +173,16 @@ LUA;
 
             if ($removed) {
                 Log::info("Semaphore {$this->redisKey} released by {$this->identifier}");
+
                 return true;
             } else {
                 Log::warning("Semaphore {$this->redisKey}: identifier {$this->identifier} not found for release");
+
                 return false;
             }
         } catch (\Exception $e) {
-            Log::error("Semaphore release error: " . $e->getMessage());
+            Log::error('Semaphore release error: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -214,9 +221,11 @@ LUA;
 LUA;
 
             $result = Redis::eval($lua, 1, $this->redisKey, $this->identifier, $currentTime, $this->ttl);
+
             return $result === 1;
         } catch (\Exception $e) {
-            Log::error("Semaphore check acquired error: " . $e->getMessage());
+            Log::error('Semaphore check acquired error: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -225,6 +234,7 @@ LUA;
      * Get semaphore statistics as DTO
      *
      * @return Stats Semaphore statistics DTO
+     *
      * @throws \RuntimeException If statistics cannot be retrieved
      */
     public function getStats(): Stats
@@ -263,7 +273,7 @@ LUA;
                 isFull: $count >= $this->maxConcurrent,
                 identifier: $this->identifier,
                 isAcquiredByMe: $this->isAcquiredByMe(),
-                createdAt: new DateTimeImmutable(),
+                createdAt: new DateTimeImmutable,
                 driver: 'redis',
                 metadata: [
                     'redis_key' => $this->redisKey,
@@ -272,8 +282,8 @@ LUA;
                 ]
             );
         } catch (\Exception $e) {
-            Log::error("Semaphore stats error: " . $e->getMessage());
-            throw new \RuntimeException("Failed to get semaphore statistics: " . $e->getMessage(), 0, $e);
+            Log::error('Semaphore stats error: ' . $e->getMessage());
+            throw new \RuntimeException('Failed to get semaphore statistics: ' . $e->getMessage(), 0, $e);
         }
     }
 
@@ -299,7 +309,8 @@ LUA;
 
             return Redis::eval($lua, 1, $this->redisKey, $currentTime, $this->ttl) ?: 0;
         } catch (\Exception $e) {
-            Log::error("Semaphore count error: " . $e->getMessage());
+            Log::error('Semaphore count error: ' . $e->getMessage());
+
             return 0;
         }
     }
@@ -344,9 +355,11 @@ LUA;
         try {
             $deleted = Redis::del($this->redisKey);
             Log::warning("Semaphore {$this->redisKey} cleared, deleted: {$deleted}");
+
             return $deleted > 0;
         } catch (\Exception $e) {
-            Log::error("Semaphore clear error: " . $e->getMessage());
+            Log::error('Semaphore clear error: ' . $e->getMessage());
+
             return false;
         }
     }

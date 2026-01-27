@@ -18,8 +18,8 @@ interface SemaphoreInterface
      * Blocks execution until a semaphore slot becomes available
      * or the timeout expires.
      *
-     * @param int $acquireTimeout Maximum wait time in seconds.
-     *                            Minimum 1 second.
+     * @param  int  $acquireTimeout  Maximum wait time in seconds.
+     *                               Minimum 1 second.
      * @return bool true - semaphore acquired, false - failed to acquire
      */
     public function acquire(int $acquireTimeout): bool;
@@ -29,6 +29,7 @@ interface SemaphoreInterface
      *
      * @return bool true - semaphore successfully released,
      *              false - semaphore was not acquired or an error occurred
+     *
      * @throws \LogicException When attempting to release a non-acquired semaphore
      */
     public function release(): bool;
@@ -51,7 +52,6 @@ interface SemaphoreInterface
     /**
      * Get complete semaphore statistics
      *
-     * @return Stats
      * @throws \RuntimeException On errors retrieving statistics
      */
     public function getStats(): Stats;

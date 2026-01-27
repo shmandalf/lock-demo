@@ -4,10 +4,10 @@ namespace App\Services\Semaphores;
 
 use App\Contracts\SemaphoreInterface;
 use App\Services\Semaphores\DTO\Stats;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use DateTimeImmutable;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
 
 class LegacySemaphore implements SemaphoreInterface
 {
@@ -49,9 +49,9 @@ class LegacySemaphore implements SemaphoreInterface
     /**
      * Create a new Legacy semaphore instance
      *
-     * @param string $key Semaphore identifier (without prefix)
-     * @param int $maxConcurrent Maximum number of concurrent acquisitions
-     * @param int $ttl TTL in seconds for automatic release
+     * @param  string  $key  Semaphore identifier (without prefix)
+     * @param  int  $maxConcurrent  Maximum number of concurrent acquisitions
+     * @param  int  $ttl  TTL in seconds for automatic release
      */
     public function __construct(string $key, int $maxConcurrent = 3, int $ttl = 30)
     {
@@ -64,8 +64,8 @@ class LegacySemaphore implements SemaphoreInterface
     /**
      * Acquire semaphore with timeout
      *
-     * @param int $acquireTimeout Maximum wait time in seconds
-     *                            Any value is accepted, developer's responsibility
+     * @param  int  $acquireTimeout  Maximum wait time in seconds
+     *                               Any value is accepted, developer's responsibility
      */
     public function acquire(int $acquireTimeout): bool
     {
@@ -83,6 +83,7 @@ class LegacySemaphore implements SemaphoreInterface
 
             if ($this->acquireInternal()) {
                 Log::debug("Legacy semaphore acquired on attempt {$attempt}");
+
                 return true;
             }
 
@@ -92,6 +93,7 @@ class LegacySemaphore implements SemaphoreInterface
         }
 
         Log::debug("Legacy semaphore timeout after {$acquireTimeout}s, {$attempt} attempts");
+
         return false;
     }
 
@@ -104,7 +106,7 @@ class LegacySemaphore implements SemaphoreInterface
     {
         try {
             // Check TTL for all slots and renew if needed
-            for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
+            for ($slot = 0; $slot < $this->maxConcurrent; $slot++) {
                 $slotKey = $this->getSlotKey($slot);
                 if (Redis::exists($slotKey) && Redis::ttl($slotKey) == -1) {
                     Redis::expire($slotKey, $this->ttl);
@@ -112,7 +114,7 @@ class LegacySemaphore implements SemaphoreInterface
             }
 
             // Find and acquire an available slot with SET and NX
-            for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
+            for ($slot = 0; $slot < $this->maxConcurrent; $slot++) {
                 $slotKey = $this->getSlotKey($slot);
 
                 // Atomic SET with NX and EX
@@ -121,7 +123,7 @@ class LegacySemaphore implements SemaphoreInterface
                     $this->identifier,
                     'EX',
                     $this->ttl,
-                    'NX'
+                    'NX',
                 ]);
 
                 // Check result
@@ -129,13 +131,15 @@ class LegacySemaphore implements SemaphoreInterface
                     $this->slotIndex = $slot;
                     $this->isAcquired = true;
                     Log::debug("Legacy semaphore slot acquired atomically: {$slotKey} by {$this->identifier}");
+
                     return true;
                 }
             }
 
             return false;
         } catch (\Exception $e) {
-            Log::error("Legacy semaphore acquire error: " . $e->getMessage());
+            Log::error('Legacy semaphore acquire error: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -147,8 +151,9 @@ class LegacySemaphore implements SemaphoreInterface
      */
     public function release(): bool
     {
-        if (!$this->isAcquired || $this->slotIndex === null) {
-            Log::warning("Legacy semaphore not acquired or already released");
+        if (! $this->isAcquired || $this->slotIndex === null) {
+            Log::warning('Legacy semaphore not acquired or already released');
+
             return false;
         }
 
@@ -162,17 +167,20 @@ class LegacySemaphore implements SemaphoreInterface
                 if ($deleted) {
                     Log::info("Legacy semaphore released: {$slotKey}");
                     $this->resetState();
+
                     return true;
                 }
             } else {
-                Log::warning("Legacy semaphore identifier mismatch on release");
+                Log::warning('Legacy semaphore identifier mismatch on release');
             }
 
             $this->resetState();
+
             return false;
         } catch (\Exception $e) {
-            Log::error("Legacy semaphore release error: " . $e->getMessage());
+            Log::error('Legacy semaphore release error: ' . $e->getMessage());
             $this->resetState();
+
             return false;
         }
     }
@@ -184,16 +192,18 @@ class LegacySemaphore implements SemaphoreInterface
      */
     public function isAcquiredByMe(): bool
     {
-        if (!$this->isAcquired || $this->slotIndex === null) {
+        if (! $this->isAcquired || $this->slotIndex === null) {
             return false;
         }
 
         try {
             $slotKey = $this->getSlotKey($this->slotIndex);
             $currentValue = Redis::get($slotKey);
+
             return $currentValue === $this->identifier;
         } catch (\Exception $e) {
-            Log::error("Legacy semaphore check error: " . $e->getMessage());
+            Log::error('Legacy semaphore check error: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -218,7 +228,7 @@ class LegacySemaphore implements SemaphoreInterface
                 isFull: $currentCount >= $this->maxConcurrent,
                 identifier: $this->identifier,
                 isAcquiredByMe: $this->isAcquiredByMe(),
-                createdAt: new DateTimeImmutable(),
+                createdAt: new DateTimeImmutable,
                 driver: 'legacy',
                 metadata: [
                     'occupied_slots' => $occupiedSlots,
@@ -227,8 +237,8 @@ class LegacySemaphore implements SemaphoreInterface
                 ]
             );
         } catch (\Exception $e) {
-            Log::error("Legacy semaphore stats error: " . $e->getMessage());
-            throw new \RuntimeException("Failed to get semaphore statistics: " . $e->getMessage(), 0, $e);
+            Log::error('Legacy semaphore stats error: ' . $e->getMessage());
+            throw new \RuntimeException('Failed to get semaphore statistics: ' . $e->getMessage(), 0, $e);
         }
     }
 
@@ -242,7 +252,7 @@ class LegacySemaphore implements SemaphoreInterface
         try {
             $occupiedCount = 0;
 
-            for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
+            for ($slot = 0; $slot < $this->maxConcurrent; $slot++) {
                 $slotKey = $this->getSlotKey($slot);
                 if (Redis::exists($slotKey)) {
                     $occupiedCount++;
@@ -251,7 +261,8 @@ class LegacySemaphore implements SemaphoreInterface
 
             return $occupiedCount;
         } catch (\Exception $e) {
-            Log::error("Legacy semaphore count error: " . $e->getMessage());
+            Log::error('Legacy semaphore count error: ' . $e->getMessage());
+
             return 0;
         }
     }
@@ -296,16 +307,18 @@ class LegacySemaphore implements SemaphoreInterface
         try {
             $deleted = 0;
 
-            for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
+            for ($slot = 0; $slot < $this->maxConcurrent; $slot++) {
                 $slotKey = $this->getSlotKey($slot);
                 $deleted += Redis::del($slotKey);
             }
 
             Log::warning("Legacy semaphore cleared: {$this->redisKey}, deleted: {$deleted} slots");
             $this->resetState();
+
             return $deleted > 0;
         } catch (\Exception $e) {
-            Log::error("Legacy semaphore clear error: " . $e->getMessage());
+            Log::error('Legacy semaphore clear error: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -327,7 +340,7 @@ class LegacySemaphore implements SemaphoreInterface
     /**
      * Get Redis key for specific slot
      *
-     * @param int $slot Slot index (0-based)
+     * @param  int  $slot  Slot index (0-based)
      * @return string Redis key for the slot
      */
     private function getSlotKey(int $slot): string
@@ -344,7 +357,7 @@ class LegacySemaphore implements SemaphoreInterface
     {
         $occupied = [];
 
-        for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
+        for ($slot = 0; $slot < $this->maxConcurrent; $slot++) {
             $slotKey = $this->getSlotKey($slot);
             if (Redis::exists($slotKey)) {
                 $occupied[] = $slot;
@@ -364,13 +377,13 @@ class LegacySemaphore implements SemaphoreInterface
         $minTtl = 0;
         $found = false;
 
-        for ($slot = 0; $slot < $this->maxConcurrent; ++$slot) {
+        for ($slot = 0; $slot < $this->maxConcurrent; $slot++) {
             $slotKey = $this->getSlotKey($slot);
             $ttl = Redis::ttl($slotKey);
 
             // Validate only keys with $ttl > 0
             if ($ttl > 0) {
-                if (!$found || $ttl < $minTtl) {
+                if (! $found || $ttl < $minTtl) {
                     $minTtl = $ttl;
                     $found = true;
                 }

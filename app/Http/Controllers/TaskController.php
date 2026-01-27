@@ -42,7 +42,7 @@ class TaskController extends Controller
             'task_ids' => $taskIds,
             'count' => $count,
             'max_concurrent' => $maxConcurrent,
-            'message' => "{$count} task(s) queued with max concurrent = {$maxConcurrent}"
+            'message' => "{$count} task(s) queued with max concurrent = {$maxConcurrent}",
         ]);
     }
 
@@ -90,7 +90,7 @@ class TaskController extends Controller
                     'pending_jobs' => $pendingCount,
                     'locks' => $clearedLocks,
                     'semaphores' => $clearedSemaphores,
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json([

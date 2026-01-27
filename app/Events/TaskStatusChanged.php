@@ -13,9 +13,13 @@ class TaskStatusChanged implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $taskId;
+
     public $status;
+
     public $attempt;
+
     public $data;
+
     public $timestamp;
 
     public function __construct($taskId, $status, $attempt = 1, $data = [])
@@ -26,19 +30,19 @@ class TaskStatusChanged implements ShouldBroadcast
         $this->data = $data;
         $this->timestamp = now()->toDateTimeString();
 
-        \Log::info("Event created", [
+        \Log::info('Event created', [
             'task_id' => $taskId,
             'status' => $status,
             'attempt' => $attempt,
-            'driver' => config('broadcasting.default')
+            'driver' => config('broadcasting.default'),
         ]);
     }
 
     public function broadcastOn()
     {
-        \Log::debug("Broadcasting on channel: tasks", [
+        \Log::debug('Broadcasting on channel: tasks', [
             'task_id' => $this->taskId,
-            'status' => $this->status
+            'status' => $this->status,
         ]);
 
         return new Channel('tasks');

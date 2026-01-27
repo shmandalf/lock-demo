@@ -16,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
             // Get configured class from environment or config
             $className = config('app.semaphore_class');
 
-            if (!$className) {
+            if (! $className) {
                 throw new \RuntimeException(
                     'Semaphore class is not configured in app.semaphore_class'
                 );
