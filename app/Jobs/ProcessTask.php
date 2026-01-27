@@ -8,13 +8,12 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Traits\BroadcastsTaskStatus;
-use App\Traits\UsesSemaphore;
 use Illuminate\Support\Facades\Log;
 
 class ProcessTask implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-    use BroadcastsTaskStatus, UsesSemaphore;
+    use BroadcastsTaskStatus;
 
     public string $taskId;
     public int $currentAttempt = 1;

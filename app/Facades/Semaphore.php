@@ -5,17 +5,22 @@ namespace App\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static \App\Services\RedisSemaphore make(string $key, int $maxConcurrent = 2, int $timeout = 30)
- * @method static bool acquire(string $key, int $maxConcurrent = 2, int $timeout = 30)
- * @method static void release(string $key, string $identifier)
- * @method static int getCount(string $key)
- * 
- * @see \App\Services\SemaphoreManager
+ * Facade for SemaphoreFactory
+ *
+ * @method static \App\Contracts\SemaphoreInterface create(string $key, int $maxConcurrent, int $timeout)
+ * Create a new semaphore instance
+ *
+ * @see \App\Services\Semaphores\SemaphoreFactory
  */
 class Semaphore extends Facade
 {
-    protected static function getFacadeAccessor()
+    /**
+     * Get the registered name of the component
+     *
+     * @return string
+     */
+    protected static function getFacadeAccessor(): string
     {
-        return 'semaphore';
+        return \App\Services\Semaphores\SemaphoreFactory::class;
     }
 }
