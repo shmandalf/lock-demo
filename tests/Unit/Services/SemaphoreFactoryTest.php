@@ -80,6 +80,7 @@ class SemaphoreFactoryTest extends TestCase
     {
         $reflection = new \ReflectionClass($object);
         $property = $reflection->getProperty($propertyName);
+
         return $property->getValue($object);
     }
 }
