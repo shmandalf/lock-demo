@@ -28,12 +28,12 @@ class ProcessTask implements ShouldQueue
     /**
      * Semaphore TTL in seconds (automatic release)
      */
-    private const SEMAPHORE_TTL = 30;
+    private const SEMAPHORE_TTL = 5; // 4-5 seconds for processing max
 
     /**
      * Maximum time to wait for semaphore acquisition in seconds
      */
-    private const SEMAPHORE_ACQUIRE_TIMEOUT = 10;
+    private const SEMAPHORE_ACQUIRE_TIMEOUT = 3; // wait 3 seconds before retrying
 
     /**
      * Task identifier
