@@ -14,7 +14,7 @@ class LegacySemaphore implements SemaphoreInterface
     /**
      * Redis key prefix for semaphore storage
      */
-    private const KEY_PREFIX = 'legacy-semaphore:';
+    private const KEY_PREFIX = 'semaphore-legacy:';
 
     /**
      * Maximum number of concurrent acquisitions
