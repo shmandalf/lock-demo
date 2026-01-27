@@ -64,16 +64,16 @@ class TaskStatusChanged implements ShouldBroadcast
         ];
     }
 
-    // Добавляем ретраи для broadcasting
+    // Add retries for broadcasting
     public function broadcastWhen()
     {
-        // Всегда пытаемся отправить
+        // Always try to broadcast
         return true;
     }
 
     public function broadcastAfterCommit()
     {
-        // Не ждем коммита, отправляем сразу
+        // Dont wait for commit, broadcast immediately
         return false;
     }
 }
