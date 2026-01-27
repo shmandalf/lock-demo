@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Tests & Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP 8.5
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.5'
+        extensions: mbstring, xml, ctype, iconv, intl, pdo, redis
+        tools: composer:v2
+
+    - name: Validate composer.json
+      run: composer validate --strict
+
+    - name: Cache Composer packages
+      id: composer-cache
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-
+
+    - name: Install dependencies
+      run: composer install --no-progress --prefer-dist
+
+    - name: Check code style with Laravel Pint
+      run: vendor/bin/pint --test
+
+    - name: Run static analysis with PHPStan
+      run: vendor/bin/phpstan analyse --memory-limit=1G
+
+    - name: Setup test environment
+      run: |
+        cp .env.test .env
+        php artisan key:generate
+
+    - name: Generate application key
+      run: php artisan key:generate --env=test
+
+    - name: Run tests
+      run: php artisan test --env=test
+      env:
+        APP_ENV: testing
